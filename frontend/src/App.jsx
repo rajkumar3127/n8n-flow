@@ -2,7 +2,7 @@ import { useEffect, useState, useCallback, useRef } from "react";
 import ConversationCard from "./components/ConversationCard";
 import ChatPanel from "./components/ChatPanel";
 
-const API_BASE = "/api";
+const API_BASE = import.meta.env.VITE_API_BASE_URL || "/api";
 
 // ─── Toast notifications ───
 function Toast({ toasts }) {

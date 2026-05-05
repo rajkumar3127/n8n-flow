@@ -61,7 +61,8 @@ export default function ConversationCard({ conversation, onDelete, addToast }) {
   const handleDelete = useCallback(async () => {
     setDeleting(true);
     try {
-      await fetch(`/api/conversations/${conversation.id}`, { method: "DELETE" });
+      const API_BASE = import.meta.env.VITE_API_BASE_URL || "/api";
+      await fetch(`${API_BASE}/conversations/${conversation.id}`, { method: "DELETE" });
       onDelete?.(conversation.id);
     } catch (err) {
       console.error("Delete failed:", err);
@@ -73,7 +74,8 @@ export default function ConversationCard({ conversation, onDelete, addToast }) {
   const handleReEnrich = useCallback(async () => {
     try {
       addToast?.("Re-processing...", "info");
-      const res = await fetch(`http://localhost:3001/api/conversations/${conversation.id}/re-enrich`, { method: "POST" });
+      const API_BASE = import.meta.env.VITE_API_BASE_URL || "/api";
+      const res = await fetch(`${API_BASE}/conversations/${conversation.id}/re-enrich`, { method: "POST" });
       if (res.ok) {
         addToast?.("Re-processed successfully!", "success");
         // The SSE update_message event will automatically refresh the UI
