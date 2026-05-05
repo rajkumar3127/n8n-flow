@@ -1,0 +1,234 @@
+{
+  "id": "whatsapp-ai-workflow",
+  "name": "WhatsApp AI Automation",
+  "active": false,
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "whatsapp",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "a1b2c3d4-0001-0001-0001-000000000001",
+      "name": "WhatsApp Webhook POST",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [240, 380],
+      "webhookId": "whatsapp-post"
+    },
+    {
+      "parameters": {
+        "httpMethod": "GET",
+        "path": "whatsapp",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "a1b2c3d4-0001-0001-0001-000000000002",
+      "name": "WhatsApp Webhook GET",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [240, 220],
+      "webhookId": "whatsapp-get"
+    },
+    {
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "={{ $json.query['hub.challenge'] }}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "a1b2c3d4-0002-0002-0002-000000000001",
+      "name": "Send Challenge",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [500, 220]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Extract message data from WhatsApp POST payload\nconst body = $input.first().json.body;\n\n// Validate WhatsApp message structure\nif (\n  body.object !== 'whatsapp_business_account' ||\n  !body.entry?.[0]?.changes?.[0]?.value?.messages?.[0]\n) {\n  return [{ json: { skip: true, reason: 'Not a valid WhatsApp message event' } }];\n}\n\nconst change = body.entry[0].changes[0].value;\nconst message = change.messages[0];\n\nif (!message.text?.body) {\n  return [{ json: { skip: true, reason: 'Non-text message (image/audio/etc)' } }];\n}\n\nconst fromNumber = message.from;\nconst messageText = message.text.body;\nconst timestamp = new Date(parseInt(message.timestamp) * 1000).toISOString();\nconst messageId = message.id;\nconst profileName = change.contacts?.[0]?.profile?.name || 'Unknown';\n\nconsole.log(`[n8n] 📩 Message from ${fromNumber} (${profileName}): \"${messageText}\"`);\n\nreturn [{\n  json: {\n    skip: false,\n    from_number: fromNumber,\n    message: messageText,\n    timestamp,\n    message_id: messageId,\n    profile_name: profileName\n  }\n}];"
+      },
+      "id": "a1b2c3d4-0003-0003-0003-000000000001",
+      "name": "Extract Message",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [500, 380]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ $json.skip }}",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "id": "a1b2c3d4-0004-0004-0004-000000000001",
+      "name": "Should Skip?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [720, 380]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={ \"status\": \"skipped\" }",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "a1b2c3d4-0005-0005-0005-000000000001",
+      "name": "Respond Skip OK",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [940, 240]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.groq.com/openai/v1/chat/completions",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer gsk_YOUR_GROQ_API_KEY_HERE"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={\n  \"model\": \"llama-3.3-70b-versatile\",\n  \"messages\": [\n    {\n      \"role\": \"system\",\n      \"content\": \"You are an intelligent WhatsApp assistant. Analyze the user message and respond ONLY with a valid JSON object (no markdown, no extra text) in this exact structure:\\n{\\n  \\\"intent\\\": \\\"string (e.g., weather_query, product_search, support_request, general_question, booking, reminder, translation)\\\",\\n  \\\"entities\\\": {},\\n  \\\"response\\\": \\\"string — friendly helpful reply\\\",\\n  \\\"sentiment\\\": \\\"positive|neutral|negative\\\",\\n  \\\"confidence\\\": 0.95,\\n  \\\"language\\\": \\\"en\\\",\\n  \\\"suggested_actions\\\": [],\\n  \\\"category\\\": \\\"string\\\",\\n  \\\"priority\\\": \\\"low|medium|high\\\",\\n  \\\"metadata\\\": { \\\"model\\\": \\\"llama-3.3-70b-versatile\\\", \\\"processed_at\\\": \\\"now\\\" }\\n}\"\n    },\n    {\n      \"role\": \"user\",\n      \"content\": \"={{ $json.message }}\"\n    }\n  ],\n  \"temperature\": 0.3,\n  \"max_tokens\": 512,\n  \"response_format\": { \"type\": \"json_object\" }\n}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "a1b2c3d4-0006-0006-0006-000000000001",
+      "name": "Groq LLM",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [940, 520]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Parse Groq response and build final ingest payload\nconst groqResponse = $input.first().json;\nconst prevData = $('Extract Message').first().json;\n\nlet structuredJson;\ntry {\n  const content = groqResponse.choices[0].message.content;\n  structuredJson = typeof content === 'string' ? JSON.parse(content) : content;\n  // Patch in accurate metadata\n  structuredJson.metadata = {\n    ...structuredJson.metadata,\n    model: 'llama-3.3-70b-versatile',\n    processed_at: new Date().toISOString(),\n    processed_by: 'n8n'\n  };\n} catch (e) {\n  structuredJson = {\n    intent: 'parse_error',\n    entities: {},\n    response: 'Could not parse LLM response.',\n    sentiment: 'neutral',\n    confidence: 0,\n    language: 'en',\n    suggested_actions: [],\n    category: 'error',\n    priority: 'low',\n    metadata: {\n      error: e.message,\n      raw: groqResponse.choices?.[0]?.message?.content,\n      model: 'llama-3.3-70b-versatile',\n      processed_at: new Date().toISOString(),\n      processed_by: 'n8n'\n    }\n  };\n}\n\nconsole.log(`[n8n] ✅ Intent: ${structuredJson.intent} | Confidence: ${structuredJson.confidence}`);\n\nreturn [{\n  json: {\n    from_number: prevData.from_number,\n    message: prevData.message,\n    timestamp: prevData.timestamp,\n    profile_name: prevData.profile_name,\n    structured_json: structuredJson\n  }\n}];"
+      },
+      "id": "a1b2c3d4-0007-0007-0007-000000000001",
+      "name": "Parse LLM Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1160, 520]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:3001/api/ingest",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{ JSON.stringify($json) }}",
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "id": "a1b2c3d4-0008-0008-0008-000000000001",
+      "name": "Store in Backend",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1380, 520]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={ \"status\": \"ok\" }",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "a1b2c3d4-0009-0009-0009-000000000001",
+      "name": "Respond 200 OK",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1600, 520]
+    }
+  ],
+  "connections": {
+    "WhatsApp Webhook GET": {
+      "main": [
+        [
+          { "node": "Send Challenge", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "WhatsApp Webhook POST": {
+      "main": [
+        [
+          { "node": "Extract Message", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Extract Message": {
+      "main": [
+        [
+          { "node": "Should Skip?", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Should Skip?": {
+      "main": [
+        [
+          { "node": "Respond Skip OK", "type": "main", "index": 0 }
+        ],
+        [
+          { "node": "Groq LLM", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Groq LLM": {
+      "main": [
+        [
+          { "node": "Parse LLM Response", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Parse LLM Response": {
+      "main": [
+        [
+          { "node": "Store in Backend", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Store in Backend": {
+      "main": [
+        [
+          { "node": "Respond 200 OK", "type": "main", "index": 0 }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "saveExecutionProgress": true,
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all"
+  },
+  "tags": []
+}
